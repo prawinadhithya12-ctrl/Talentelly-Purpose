@@ -1,0 +1,122 @@
+
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Inventory Demo</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    body{font-family: Arial; margin:20px}
+    input,select{padding:6px;margin:4px}
+    table{border-collapse:collapse;width:100%}
+    th,td{border:1px solid #ddd;padding:8px;text-align:left}
+    .controls{margin-bottom:12px}
+  </style>
+</head>
+<body>
+  <h2>Inventory Management — Demo</h2>
+  <div class="controls">
+    <button onclick="load()">Refresh list</button>
+    <button onclick="showAdd()">Add item</button>
+    <button onclick="showAudit()">View Audit Log</button>
+    <input id="q" placeholder="search name or sku">
+    <button onclick="load()">Search</button>
+  </div>
+
+  <div id="form" style="display:none;margin-bottom:12px;border:1px solid #ccc;padding:12px">
+    <h3 id="form-title">Add Item</h3>
+    <input id="name" placeholder="Name"><input id="sku" placeholder="SKU"><br>
+    <input id="category" placeholder="Category"><input id="quantity" type="number" placeholder="Quantity" value="0"><br>
+    <input id="unit_price" type="number" step="0.01" placeholder="Unit price"><input id="location" placeholder="Location"><br>
+    <input id="min_stock" type="number" placeholder="Min stock"><input id="notes" placeholder="Notes"><br>
+    <button onclick="submitForm()">Save</button>
+    <button onclick="hideForm()">Cancel</button>
+  </div>
+
+  <div id="list"></div>
+
+  <div id="audit" style="display:none">
+    <h3>Audit log (recent)</h3>
+    <pre id="audit-pre"></pre>
+  </div>
+
+  <script>
+    let editingId = null;
+    async function load(){
+      const q = document.getElementById('q').value;
+      const res = await fetch('/api/v1/inventory' + (q?('?q='+encodeURIComponent(q)):'')); 
+      const data = await res.json();
+      const table = ['<table><tr><th>ID</th><th>Name</th><th>SKU</th><th>Qty</th><th>Loc</th><th>Actions</th></tr>'];
+      for(const r of data){
+        table.push(`<tr><td>${r.id}</td><td>${r.name}</td><td>${r.sku}</td><td>${r.quantity}</td><td>${r.location}</td>
+          <td>
+            <button onclick="edit(${r.id})">Edit</button>
+            <button onclick="adjust(${r.id},1)">+1</button>
+            <button onclick="adjust(${r.id},-1)">-1</button>
+            <button onclick="del(${r.id})">Delete</button>
+          </td></tr>`);
+      }
+      table.push('</table>');
+      document.getElementById('list').innerHTML = table.join('');
+      document.getElementById('audit').style.display='none';
+    }
+    function showAdd(){
+      editingId = null;
+      document.getElementById('form-title').innerText = 'Add Item';
+      document.getElementById('form').style.display = 'block';
+      ['name','sku','category','quantity','unit_price','location','min_stock','notes'].forEach(id=>document.getElementById(id).value='');
+    }
+    function hideForm(){ document.getElementById('form').style.display='none'; }
+    async function submitForm(){
+      const body = {
+        name: document.getElementById('name').value,
+        sku: document.getElementById('sku').value,
+        category: document.getElementById('category').value,
+        quantity: Number(document.getElementById('quantity').value||0),
+        unit_price: Number(document.getElementById('unit_price').value||0),
+        location: document.getElementById('location').value,
+        min_stock: Number(document.getElementById('min_stock').value||0),
+        notes: document.getElementById('notes').value
+      };
+      if (!body.name || !body.sku){ alert('name and sku required'); return; }
+      if (editingId){
+        const res = await fetch('/api/v1/inventory/'+editingId, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+        if (!res.ok){ alert('Error: '+(await res.text())); }
+      } else {
+        const res = await fetch('/api/v1/inventory', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+        if (res.status === 409){ alert('SKU duplicate'); return; }
+      }
+      hideForm(); load();
+    }
+    async function edit(id){
+      const res = await fetch('/api/v1/inventory/'+id);
+      const r = await res.json();
+      editingId = id;
+      document.getElementById('form-title').innerText = 'Edit Item #' + id;
+      ['name','sku','category','quantity','unit_price','location','min_stock','notes'].forEach(idf=>{
+        document.getElementById(idf).value = r[idf] || '';
+      });
+      document.getElementById('form').style.display='block';
+    }
+    async function adjust(id,delta){
+      const reason = prompt('Reason for adjustment (optional):','');
+      await fetch('/api/v1/inventory/'+id+'/quantity', {method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify({delta, reason})});
+      load();
+    }
+    async function del(id){
+      if (!confirm('Delete item? This will soft-delete.')) return;
+      await fetch('/api/v1/inventory/'+id+'?mode=soft', {method:'DELETE'});
+      load();
+    }
+    async function showAudit(){
+      const res = await fetch('/api/v1/audit');
+      const data = await res.json();
+      document.getElementById('audit-pre').innerText = JSON.stringify(data, null, 2);
+      document.getElementById('audit').style.display='block';
+    }
+
+    // initial load
+    load();
+  </script>
+</body>
+</html>

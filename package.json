@@ -1,0 +1,15 @@
+{
+  "name": "inventory-demo",
+  "version": "1.0.0",
+  "description": "Full-stack Inventory Management Demo (Node.js + Express + SQLite)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "sqlite3": "^5.1.6",
+    "body-parser": "^1.20.2",
+    "cors": "^2.8.5"
+  }
+}
