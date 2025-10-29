@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Inventory</title>
+  <link rel="stylesheet" href="Inventory.css" />
+  <style>
+  </style>
+</head>
+
+<body>
+ 
+  <div class="main-content">
+    <div class="transactions-section">
+    <h2 style="display:flex; align-items:center; justify-content:space-between; gap:16px;">
+      <span>💸 Inventory</span>
+    </h2>
+    <div class="transactions-container">
+      <div class="transactions-header">
+        <h2>Recent Stock Available</h2>
+        <div class="filter-bar">
+          <input type="text" id="searchBox" placeholder="Search title or category..." />
+          <select id="filterType">
+            <option value="">All Types</option>
+            <option value="income">Income</option>
+            <option value="expense">Expense</option>
+          </select>
+        </div>
+      </div>
+
+      <table class="transaction-table">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Title</th>
+            <th>Category</th>
+            <th>Type</th>
+            <th>Amount</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="transactionList"></tbody>
+      </table>
+    </div>
+
+    
+    <div class="add-transaction-card">
+      <h3 id="formTitle">Add New Stock</h3>
+      <form id="transactionForm">
+        <input type="text" id="title" placeholder="Product Name" required />
+        <input type="number" id="quantity" placeholder="Quantity" required />
+        <input type="number" id="amount" placeholder="Amount" required />
+        <input type="date" id="date" required />
+        <input type="text" id="category" placeholder="category" required />
+        <input type="text" id="location " placeholder="location" required>
+        <button type="submit" class="add-btn">Add Stock</button>
+        <button type="button" id="cancelEditBtn" style="display:none; background-color:#ef4444;">
+          Cancel
+        </button>
+      </form>
+    </div>
+    </div>
+  </div>
+
+  <script src="auth.js"></script>
+  <script>
+    const __authed = auth.requireAuth();
+    const transactionList = document.getElementById("transactionList");
+    const form = document.getElementById("transactionForm");
+    const formTitle = document.getElementById("formTitle");
+    const addBtn = document.querySelector(".add-btn");
+    const cancelBtn = document.getElementById("cancelEditBtn");
+
+    async function loadTransactions() {
+  const res = await auth.apiFetch("/api/expenses");
+  let transactions = await res.json();
+  
+  transactions.sort((a, b) => new Date(b.date) - new Date(a.date));
+  const filterType = document.getElementById("filterType").value;
+  const searchQuery = document.getElementById("searchBox").value.toLowerCase();
+
+  if (filterType) {
+    transactions = transactions.filter(t => t.type.toLowerCase() === filterType);
+  }
+
+  if (searchQuery) {
+    transactions = transactions.filter(t =>
+      t.title.toLowerCase().includes(searchQuery) ||
+      t.category.toLowerCase().includes(searchQuery)
+    );
+  }
+
+ 
+  transactions = transactions.slice(0, 4);
+
+ 
+  transactionList.innerHTML = "";
+  transactions.forEach(tx => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${tx.date || '-'}</td>
+      <td>${tx.title}</td>
+      <td>${tx.category}</td>
+      <td class="${tx.type.toLowerCase()}">${tx.type}</td>
+      <td>₹${tx.amount}</td>
+      <td>
+        <button class="action-btn edit-btn" onclick="editTransaction(${tx.id})">Edit</button>
+        <button class="action-btn delete-btn" onclick="deleteTransaction(${tx.id})">Delete</button>
+      </td>
+    `;
+    transactionList.appendChild(tr);
+  });
+}
+
+
+    
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+
+      const editId = form.getAttribute("data-edit-id");
+      const newTx = {
+        title: document.getElementById("title").value,
+        amount: parseFloat(document.getElementById("amount").value),
+        category: document.getElementById("category").value,
+        type: document.getElementById("type").value,
+        date: document.getElementById("date").value
+      };
+
+      if (editId) {
+        await auth.apiFetch(`/api/update/${editId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(newTx)
+        });
+        form.removeAttribute("data-edit-id");
+        addBtn.textContent = "Add Transaction";
+        addBtn.style.backgroundColor = "#3b82f6";
+        formTitle.textContent = "Add Transaction";
+        cancelBtn.style.display = "none";
+      } else {
+        await auth.apiFetch("/api/expenses", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(newTx)
+        });
+      }
+
+      form.reset();
+      loadTransactions();
+    });
+
+    
+    async function editTransaction(id) {
+      const res = await auth.apiFetch(`/api/expenses/${id}`);
+      const tx = await res.json();
+
+      document.getElementById("title").value = tx.title;
+      document.getElementById("amount").value = tx.amount;
+      document.getElementById("category").value = tx.category;
+      document.getElementById("type").value = tx.type;
+      document.getElementById("date").value = tx.date;
+
+      form.setAttribute("data-edit-id", id);
+      formTitle.textContent = "Edit Transaction";
+      addBtn.textContent = "Update Transaction";
+      addBtn.style.backgroundColor = "#10b981";
+      cancelBtn.style.display = "inline-block";
+    }
+
+   
+    cancelBtn.addEventListener("click", () => {
+      form.reset();
+      form.removeAttribute("data-edit-id");
+      formTitle.textContent = "Add Transaction";
+      addBtn.textContent = "Add Transaction";
+      addBtn.style.backgroundColor = "#3b82f6";
+      cancelBtn.style.display = "none";
+    });
+
+    
+    async function deleteTransaction(id) {
+      await auth.apiFetch(`/api/delete/${id}`, { method: "DELETE" });
+      loadTransactions();
+    }
+
+    document.getElementById("searchBox").addEventListener("input", loadTransactions);
+    document.getElementById("filterType").addEventListener("change", loadTransactions);
+
+    
+    if (__authed) loadTransactions();
+  </script>
+</body>
+</html>
